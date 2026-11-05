@@ -67,7 +67,7 @@ class ChatSystemController extends Controller
                     );
                 }
 
-                Message::create([
+                $message = Message::create([
                     'conversation_id'     => $conv->id,
                     'whatsapp_account_id' => $acc->id,
                     'sender_id'           => $this->agentUserId(),
@@ -85,6 +85,10 @@ class ChatSystemController extends Controller
                 ]);
 
                 $conv->touch();
+                DB::afterCommit(function () use ($message) {
+                    try { event(new \App\Events\MessageSent($message)); }
+                    catch (\Throwable $e) { Log::warning('Outbound message stored but broadcast failed', ['message_id' => $message->id]); }
+                });
             });
         } else {
             Log::error('Failed to send WhatsApp message', [
@@ -162,7 +166,7 @@ class ChatSystemController extends Controller
                     );
                 }
     
-                Message::create([
+                $message = Message::create([
                     'conversation_id'     => $conv->id,
                     'whatsapp_account_id' => $acc->id,
                     'sender_id'           => $this->agentUserId(),
@@ -181,6 +185,10 @@ class ChatSystemController extends Controller
                 ]);
     
                 $conv->touch();
+                DB::afterCommit(function () use ($message) {
+                    try { event(new \App\Events\MessageSent($message)); }
+                    catch (\Throwable $e) { Log::warning('Outbound message stored but broadcast failed', ['message_id' => $message->id]); }
+                });
             });
         } else {
             Log::error('Failed to send WhatsApp template', [
@@ -198,7 +206,11 @@ class ChatSystemController extends Controller
      * ======================== */
     protected function currentAccount(): ?WhatsAppAccount
     {
-        return WhatsAppAccount::where('is_active', true)->orderByDesc('id')->first();
+        $query = WhatsAppAccount::where('is_active', true);
+        $phoneNumberId = auth('client')->user()?->phone_number_id ?? request('phone_number_id');
+        if ($phoneNumberId) return $query->where('phone_number_id', $phoneNumberId)->first();
+        // A default is safe only when there is exactly one configured account.
+        return $query->count() === 1 ? $query->first() : null;
     }
 
     protected function apiUrl(string $path): string
@@ -229,7 +241,7 @@ class ChatSystemController extends Controller
 
     protected function agentUserId(): ?int
     {
-        return auth()->id() ?: 1;
+        return auth()->id();
     }
 
     protected function ensureCustomerUser(string $e164, ?string $name = null): User
@@ -249,26 +261,7 @@ class ChatSystemController extends Controller
 
     protected function ensureConversationForNumber(User $customer, ?string $receiverE164): Conversation
     {
-        $conv = Conversation::where('channel', 'whatsapp')
-            ->where('customer_id', $customer->id)
-            ->first();
-
-        if (!$conv) {
-            $conv = Conversation::create([
-                'title'       => 'WhatsApp: ' . ($customer->name ?: substr($customer->phone ?? '', -6)),
-                'channel'     => 'whatsapp',
-                'customer_id' => $customer->id,
-                'meta'        => ['receiver' => $receiverE164],
-            ]);
-        } else {
-            $meta = $conv->meta ?? [];
-            if ($receiverE164 && ($meta['receiver'] ?? null) !== $receiverE164) {
-                $meta['receiver'] = $receiverE164;
-                $conv->meta = $meta;
-                $conv->save();
-            }
-        }
-        return $conv;
+        return Conversation::forWhatsAppPair($customer, $receiverE164 ?? '');
     }
 
     protected function extractBody(array $m): array

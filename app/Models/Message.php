@@ -27,9 +27,43 @@ class Message extends Model
 
     protected $casts = [
         'meta' => 'array',
+        'is_read' => 'boolean',
+        'isMessageStatus' => 'integer',
     ];
 
 
+
+    public static function normalizeNumber(?string $number): string
+    {
+        $digits = preg_replace('/\D+/', '', $number ?? '');
+        return $digits === '' ? '' : '+' . $digits;
+    }
+
+    public static function numberVariants(?string $number): array
+    {
+        $canonical = static::normalizeNumber($number);
+        return array_values(array_unique([$canonical, ltrim($canonical, '+')]));
+    }
+
+    public function getSenderNumberAttribute($value)
+    {
+        return static::normalizeNumber($value);
+    }
+
+    public function getReceiverNumberAttribute($value)
+    {
+        return static::normalizeNumber($value);
+    }
+
+    public function setSenderNumberAttribute($value)
+    {
+        $this->attributes['sender_number'] = static::normalizeNumber($value);
+    }
+
+    public function setReceiverNumberAttribute($value)
+    {
+        $this->attributes['receiver_number'] = static::normalizeNumber($value);
+    }
 
     // Define the relationship with the Conversation model
     public function conversation()

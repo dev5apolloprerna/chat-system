@@ -1,0 +1,918 @@
+Base   URL  : getdemo.in/city-corner/api
+
+
+1)  URL  : getdemo.in/city-corner/api/login
+Request : 
+       {
+            "mobile_number" : "9028187696",
+            "password" : "admin"
+       }
+
+Response : 
+        {
+            "status": "1",
+            "message": "User List Found.",
+            "user": {
+                "id": 1,
+                "full_name": "Super",
+                "email": "admin@admin.com",
+                "mobile_number": "9028187696",
+                "role_id": 1,
+                "status": 1,
+                "created_at": "2023-10-18T05:59:30.000000Z",
+                "updated_at": "2023-10-18T05:59:30.000000Z",
+                "strIP": null
+            },
+            "authorisation": {
+                "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vZ2V0ZGVtby5pbi9jaXR5LWNvcm5lci9hcGkvbG9naW4iLCJpYXQiOjE2OTc2MDg5MDksImV4cCI6MTY5NzYxMjUwOSwibmJmIjoxNjk3NjA4OTA5LCJqdGkiOiJQbmFweVNqajQ1OHl3NWp1Iiwic3ViIjoiMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.LHEd8IUfLsQM-kKdRSRIsqevYSq6oSn3gmp8YhKi1jM",
+                "type": "bearer"
+            }
+        }
+
+// Customer 
+for customer login with branch user
+
+1)  URL  : getdemo.in/city-corner/api/login
+Request:
+        {
+            "mobile_number" : "8484838373",
+            "password" : "1234"
+        }
+
+Response :
+        {
+            "status": "1",
+            "message": "User List Found.",
+            "user": {
+                "id": 1,
+                "full_name": "Super",
+                "email": "admin@admin.com",
+                "mobile_number": "9028187696",
+                "role_id": 1,
+                "status": 1,
+                "created_at": "2023-10-18T05:59:30.000000Z",
+                "updated_at": "2023-10-18T05:59:30.000000Z",
+                "strIP": null
+            },
+            "authorisation": {
+                "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vZ2V0ZGVtby5pbi9jaXR5LWNvcm5lci9hcGkvbG9naW4iLCJpYXQiOjE2OTc2MDkyMDYsImV4cCI6MTY5NzYxMjgwNiwibmJmIjoxNjk3NjA5MjA2LCJqdGkiOiJ5N0F2azVZelhKcDNHMmthIiwic3ViIjoiMSIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.T7_OQALQ9kFoumi4Q5T20Twdi6mlhVJ_NCb8uQ6Px8o",
+                "type": "bearer"
+            }
+        }
+
+2)  URL  : getdemo.in/city-corner/api/create_customer
+request : 
+        {
+            "name" :"test customer",
+            "mobile" : "9874568787",
+            "useremail" : "testcustomer@gmail.com",
+            "customer_office_address":"test customer_office_address",
+            "customer_home_address":"test customer_home_address",
+            "no_of_order":"0",
+            "password":1234,
+            "status":0,
+            "reason":"test",
+            "mobile_number" : "8484838373"
+        }
+Response : 
+        {
+            "status": "success",
+            "message": "Customer created successfully"
+        }
+
+3)  URL : getdemo.in/city-corner/api/edit_customer
+Request :
+        {
+           "user_id":"4",
+            "name" :"jitendra patel",
+            "mobile" : "9874568787",
+            "useremail" : "testcustomer@gmail.com",
+            "customer_office_address":"53, Rita Nagar, Chandigarh - 506570",
+            "customer_home_address":"45, Abhinav Chowk, Chandigarh - 506578 ",
+            "no_of_order":"0",
+            "status":0,
+            "reason":"test",
+            "mobile_number" : "8484838373",
+        }
+Response:
+        {
+            "status": "success",
+            "message": "Customer updated successfully"
+        }
+ 4) URL : getdemo.in/city-corner/api/delete_customer
+ 
+Request: 
+        {
+            "user_id":"5",
+            "mobile_number" : "8484838373"
+        }
+
+Response :
+        {
+            "status": "success",
+            "message": "Customer deleted successfully"
+        }
+5)  URL  : getdemo.in/city-corner/api/customer_list
+Request : 
+        {
+            "mobile_number" : "8484838373"
+        }
+Response:
+        {
+            "status": "success",
+            "message": "Customer List",
+            "Customer": [
+                {
+                    "customer_id": 1,
+                    "customer_user_id": 4,
+                    "customer_name": "jitendra patel",
+                    "customer_mobile": 9874568787,
+                    "customer_email": "testcustomer@gmail.com",
+                    "customer_office_address": "53, Rita Nagar, Chandigarh - 506570",
+                    "customer_home_address": "45, Abhinav Chowk, Chandigarh - 506578",
+                    "no_of_order": 0,
+                    "customer_comment": null,
+                    "iStatus": 1,
+                    "isDelete": 0,
+                    "created_at": "2023-10-18T07:15:51.000000Z",
+                    "updated_at": "2023-10-18T07:17:03.000000Z"
+                }
+            ]
+        }
+
+
+// Branch 
+    URL : getdemo.in/city-corner/api/branch_profile
+Request:
+        {
+            "mobile_number" : "8484838373"
+        }
+Response:
+        {
+            "status": "1",
+            "branch_profile": {
+                "branch_id": 1,
+                "branch_user_id": 3,
+                "branch_name": "A P Branch",
+                "address": "43, Radhe Apartments, Nidhi Nagar Faridabad - 149986",
+                "mobile": 8484838373,
+                "branch_qrcode": "1697611453.png",
+                "iStatus": 1,
+                "isDelete": 0,
+                "created_at": "2023-10-18T06:10:10.000000Z",
+                "updated_at": "2023-10-18T06:44:13.000000Z"
+            }
+        }
+
+6) URL  : getdemo.in/city-corner/api/create_branch
+ Request :
+          {
+            "branch_list_id":1,
+            "name" :"Maninager",
+            "mobile" : "8484838373",
+            "password":1234,
+            "mobile_number": "9028187696"
+        }
+Response :
+        {
+            "status": "success",
+            "message": "Branch created successfully"
+        }
+
+7)  URL  : getdemo.in/city-corner/api/edit_branch
+Request 
+         {
+            "branch_list_id":1,
+            "user_id":"3",
+            "name" :"A P Branch",
+            "mobile" : "8484838373",
+            "image" :"1209.jpg",
+            "mobile_number": "9028187696"
+        }
+
+Response :
+        {
+            "status": "success",
+            "message": "Branch updated successfully"
+        }
+
+8 )URL : getdemo.in/city-corner/api/delete_branch
+Request :
+         {
+            "user_id":"2",
+            "mobile_number": "9028187696"
+        }
+Response:
+        {
+            "status": "success",
+            "message": "Branch deleted successfully"
+        }
+9)  URL  : getdemo.in/city-corner/api/branch_list
+Request :
+        {
+            "mobile_number": "9028187696"
+        }
+Response:
+       {
+            "status": "success",
+            "message": "Branch List.",
+            "List": [
+                {
+                    "branch_id": 1,
+                    "branch_user_id": 3,
+                    "branch_name": "A P Branch",
+                    "address": "43, Radhe Apartments, Nidhi Nagar Faridabad - 149986",
+                    "mobile": 8484838373,
+                    "branch_qrcode": "http://getdemo.in//city-corner/images/Branch/3/1697611453.png"
+                }
+            ]
+        }
+
+9) URL: getdemo.in/city-corner/api/dropdownlist
+Request:
+        {
+            "mobile_number": "8484838373"
+        }
+Response:
+        {
+            "status": "success",
+            "message": "Dropdown List.",
+            "dropdownlist": {
+                "categorylist": [
+                    {
+                        "id": "",
+                        "category_name": "Select"
+                    },
+                    {
+                        "id": 2,
+                        "category_name": "Panner Items"
+                    },
+                    {
+                        "id": 3,
+                        "category_name": "veg"
+                    },
+                    {
+                        "id": 4,
+                        "category_name": "veg 2"
+                    }
+                ],
+                "categoryTypeList": [
+                    {
+                        "category_type": "Select"
+                    },
+                    {
+                        "category_type": "punjabi"
+                    },
+                    {
+                        "category_type": "pavbhaji"
+                    },
+                    {
+                        "category_type": "other"
+                    }
+                ],
+                "BranchSettings": [
+                    {
+                        "order_status": "Select",
+                        "only_take_away": "Select",
+                        "delivery_status": "Select",
+                        "payment_type": "Select"
+                    },
+                    {
+                        "order_status": [
+                            "on",
+                            "off"
+                        ]
+                    },
+                    {
+                        "only_take_away": [
+                            "Active",
+                            "Inactive"
+                        ]
+                    },
+                    {
+                        "delivery_status": [
+                            "Active",
+                            "Inactive"
+                        ]
+                    },
+                    {
+                        "payment_type": [
+                            "online",
+                            "offline"
+                        ]
+                    }
+                ],
+                "BranchList": [
+                    {
+                        "id": "",
+                        "branch_name": "Select"
+                    },
+                    {
+                        "id": 1,
+                        "branch_name": "Maninager"
+                    }
+                ]
+            }
+        }
+
+10) URL : getdemo.in/city-corner/api/branch_setting
+Request:
+        {
+            "order_status":"on",
+            "only_take_away":"Active",
+            "delivery_status":"Active",
+            "payment_type":"online",
+            "image":"134.png", 
+            "mobile_number": "8484838373"
+        }
+Response:
+        {
+        "status": "success",
+        "message": "Branch Setting created successfully"
+        }
+    
+11) URL : getdemo.in/city-corner/api/branch_setting
+Request:
+        {
+            "branch_setting_id":1,
+            "order_status":"on",
+            "only_take_away":"Active",
+            "delivery_status":"Active",
+            "payment_type":"offline",
+            "image":"134.png", 
+            "mobile_number" : "8484838373"
+            
+            
+        }
+Response:
+        {
+            "status": "success",
+            "message": "Branch Setting updated successfully"
+        }
+12) URL  : getdemo.in/city-corner/api/active_branch_user
+Request : 
+        {
+            "branch_user_id":"3",
+            "mobile_number": "9028187696"
+        }
+Response : 
+        {
+            "status": "success",
+            "message": "Branch user activated successfully"
+        }
+    
+13)URL : getdemo.in/city-corner/api/inactive_branch_user
+Request : 
+        {
+            "branch_user_id":"3",
+            "mobile_number": "9028187696"
+        }
+Response : 
+        {
+            "status": "success",
+            "message": "Branch user inactivated successfully"
+        }
+
+14) URL  : getdemo.in/city-corner/api/create_product
+    Request : 
+        {
+        "category_id" :"1",
+        "product_name":"veg pulao",
+        "regular_rate":"120",
+        "oil_rate":"0",
+        "cheese_rate":"0",
+        "butter_rate":"0",
+        "grilled_rate":"0",
+        "product_photo":photo.jpg",
+        "mobile_number" : "8484838373"
+      }
+  Response:
+      {
+        "status": "success",
+        "message": "Product created successfully"
+      }
+15) URL : getdemo.in/city-corner/api/edit_product
+    Request : 
+    {
+        "product_id":"1",
+        "category_id" :"1",
+        "product_name":"veg pulao",
+        "regular_rate":"150",
+        "cheese_rate":"0",
+        "butter_rate":"0",
+        "grilled_rate":"0",
+        "product_photo":photo.jpg",
+        "mobile_number" : "8484838373"
+      }
+  Response:
+      {
+        "status": "success",
+        "message": "Product updated successfully"
+      }
+ 
+ 16) URL  : getdemo.in/city-corner/api/product_list
+ Request:
+         { 
+                "mobile_number" : "8484838373"
+        }
+  Response: 
+        {
+            "status": "success",
+            "message": "Product List",
+            "Product": [
+                {
+                    "product_id": 1,
+                    "branch_id": 3,
+                    "category_id": 1,
+                    "product_name": "veg pulao",
+                    "regular_rate": 150,
+                    "oil_rate": 0,
+                    "cheese_rate": 0,
+                    "butter_rate": 0,
+                    "grilled_rate": 0,
+                    "product_status": "",
+                    "product_photo": "1697614702.jpg",
+                    "iStatus": 1,
+                    "isDelete": 0,
+                    "created_at": "2023-10-18T07:37:10.000000Z",
+                    "updated_at": "2023-10-18T07:38:22.000000Z"
+                }
+            ]
+        }
+
+17) URL  : getdemo.in/city-corner/api/delete_product
+Request : {
+            "product_id":"1",
+             "mobile_number" : "8484838373"
+        }
+Response:
+        {
+            "status": "success",
+            "message": "Product deleted successfully"
+        }
+    
+18) URL  : getdemo.in/city-corner/api/create_category
+Request : 
+        {
+            "category_name":"veg",
+            "category_type":"other",
+            "mobile_number" : "8484838373"
+        }
+Response: 
+        {
+            "status": "success",
+            "message": "Category created successfully"
+        }
+19) URL  : getdemo.in/city-corner/api/edit_category
+
+Request : 
+        {
+            "category_id":"1",
+            "category_name":"Pulao",
+            "category_type":"other",
+            "mobile_number" : "8484838373"
+        }
+Response:
+        {
+            "status": "success",
+            "message": "Category updated successfully"
+        }
+20) URL : getdemo.in/city-corner/api/category_list
+ Request :
+       {
+            "mobile_number" : "8484838373"
+        }
+Response:
+        {
+            "status": "success",
+            "message": "Category List",
+            "Category": [
+                {
+                    "category_id": 1,
+                    "branch_id": 3,
+                    "category_name": "veg",
+                    "category_type": "other",
+                    "iStatus": 1,
+                    "isDelete": 0,
+                    "created_at": "2023-10-18T07:41:04.000000Z",
+                    "updated_at": "2023-10-18T07:41:04.000000Z"
+                },
+                {
+                    "category_id": 2,
+                    "branch_id": 3,
+                    "category_name": "Pulao",
+                    "category_type": "other",
+                    "iStatus": 1,
+                    "isDelete": 0,
+                    "created_at": "2023-10-18T07:41:23.000000Z",
+                    "updated_at": "2023-10-18T07:41:23.000000Z"
+                }
+            ]
+        }
+21) URL : getdemo.in/city-corner/api/delete_category
+Request: 
+        {
+            "category_id":"1",
+            "mobile_number" : "8484838373"
+        }
+Response:
+        {
+            "status": "success",
+            "message": "Category deleted successfully"
+        }
+
+
+
+FOR My Cart
+URL : getdemo.in/city-corner/api/login
+Request: {
+                "mobile_number": "9874568787",
+                "password":"1234"
+        }
+Response
+        {
+            "status": "1",
+            "message": "User List Found.",
+            "user": {
+                "id": 4,
+                "full_name": "jitendra patel",
+                "email": "testcustomer@gmail.com",
+                "mobile_number": "9874568787",
+                "role_id": 2,
+                "status": 1,
+                "created_at": "2023-10-18T07:15:51.000000Z",
+                "updated_at": "2023-10-18T07:21:43.000000Z",
+                "strIP": "152.58.34.2"
+            },
+            "authorisation": {
+                "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vZ2V0ZGVtby5pbi9jaXR5LWNvcm5lci9hcGkvbG9naW4iLCJpYXQiOjE2OTc4MDM5ODAsImV4cCI6MTY5NzgwNzU4MCwibmJmIjoxNjk3ODAzOTgwLCJqdGkiOiJCbzM2R3NYTkFDQ1VIQkFWIiwic3ViIjoiNCIsInBydiI6IjIzYmQ1Yzg5NDlmNjAwYWRiMzllNzAxYzQwMDg3MmRiN2E1OTc2ZjcifQ.-CJwyWk1GZIBIueaTxpupCJF1GyM6SgrUitZxk7mMT4",
+                "type": "bearer"
+            }
+        }
+/************************************* belove data is iinserted for test *************************************/
+
+URL : getdemo.in/city-corner/api/my_cart
+Request:
+        {
+            "mobile_number" : "9874568787"
+        }
+Response:
+        {
+            "status": "success",
+            "message": "Your Cart",
+            "Your Cart": {
+                "Customer Name": "jitendra patel",
+                "iGst": "10.00",
+                "cGst": "10.00",
+                "Total Amount": 550,
+                "Products": [
+                    {
+                        "Category Name": "Pulao",
+                        "Product Name": "veg pulao",
+                        "Quantity": 4,
+                        "Rate": 150,
+                        "Special Instuction": "medium"
+                    },
+                    {
+                        "Category Name": "Panner Items",
+                        "Product Name": "paneer masala",
+                        "Quantity": 5,
+                        "Rate": 200,
+                        "Special Instuction": "medium"
+                    }
+                ]
+            }
+        }
+        
+    Login using branch to get belove data
+
+URL:getdemo.in/city-corner/api/new_order
+Request:{
+            "mobile_number" : "8484838373"
+        }
+Response:
+
+
+    {
+    "status": "success",
+    "message": "Your Cart",
+    "New Order": [
+        {
+            "Customer Name": "test customer",
+            "iGst": "10.00",
+            "cGst": "10.00",
+            "Total Amount": 500,
+            "Products": [
+                {
+                    "Category Name": "Pulao",
+                    "Product Name": "veg pulao",
+                    "Quantity": 2,
+                    "Rate": 150,
+                    "Special Instuction": "medium"
+                },
+                {
+                    "Category Name": "Panner Items",
+                    "Product Name": "paneer masala",
+                    "Quantity": 3,
+                    "Rate": 200,
+                    "Special Instuction": "medium"
+                }
+            ]
+        },
+        {
+            "Customer Name": "jitendra patel",
+            "iGst": "10.00",
+            "cGst": "10.00",
+            "Total Amount": 550,
+            "Products": [
+                {
+                    "Category Name": "Pulao",
+                    "Product Name": "veg pulao",
+                    "Quantity": 4,
+                    "Rate": 150,
+                    "Special Instuction": "medium"
+                },
+                {
+                    "Category Name": "Panner Items",
+                    "Product Name": "paneer masala",
+                    "Quantity": 5,
+                    "Rate": 200,
+                    "Special Instuction": "medium"
+                }
+            ]
+        }
+    ]
+}
+
+URL: getdemo.in/city-corner/api/ongoing_order
+Request:
+        {
+            "mobile_number" : "8484838373"
+        }
+Response:
+{
+    "status": "success",
+    "message": "Ongoing Order",
+    "Ongoing Order": [
+        {
+            "Customer Name": "test customer",
+            "iGst": "10.00",
+            "cGst": "10.00",
+            "Total Amount": 500,
+            "Products": [
+                {
+                    "Category Name": "Pulao",
+                    "Product Name": "veg pulao",
+                    "Quantity": 2,
+                    "Rate": 150,
+                    "Special Instuction": "medium"
+                },
+                {
+                    "Category Name": "Panner Items",
+                    "Product Name": "paneer masala",
+                    "Quantity": 3,
+                    "Rate": 200,
+                    "Special Instuction": "medium"
+                }
+            ]
+        }
+    ]
+}
+
+URL:getdemo.in/city-corner/api/past_order
+Request:
+        {
+            "mobile_number" : "8484838373"
+        }
+Response:
+{
+    "status": "success",
+    "message": "Past Order",
+    "Past Order": [
+        {
+            "Customer Name": "test customer",
+            "Order Status": "delivered",
+            "iGst": "10.00",
+            "cGst": "10.00",
+            "Total Amount": 500,
+            "Products": [
+                {
+                    "Category Name": "Pulao",
+                    "Product Name": "veg pulao",
+                    "Quantity": 2,
+                    "Rate": 150,
+                    "Special Instuction": "medium"
+                },
+                {
+                    "Category Name": "Panner Items",
+                    "Product Name": "paneer masala",
+                    "Quantity": 3,
+                    "Rate": 200,
+                    "Special Instuction": "medium"
+                }
+            ]
+        },
+        {
+            "Customer Name": "jitendra patel",
+            "Order Status": "cancelled",
+            "iGst": "10.00",
+            "cGst": "10.00",
+            "Total Amount": 550,
+            "Products": [
+                {
+                    "Category Name": "Pulao",
+                    "Product Name": "veg pulao",
+                    "Quantity": 4,
+                    "Rate": 150,
+                    "Special Instuction": "medium"
+                },
+                {
+                    "Category Name": "Panner Items",
+                    "Product Name": "paneer masala",
+                    "Quantity": 5,
+                    "Rate": 200,
+                    "Special Instuction": "medium"
+                }
+            ]
+        }
+    ]
+}
+
+URL : getdemo.in/city-corner/api/create_branch_master
+Request
+        {
+        "branch_name":"CTM",
+        "mobile_number": "9028187696"
+        }
+Response:
+    {
+        "status": "success",
+        "message": "Branch Master created successfully"
+    }
+     
+     
+URL : getdemo.in/city-corner/api/edit_branch_master
+Response:
+        {
+            "branch_master_id":2,
+            "branch_name":"CTM Cross Road",
+            "mobile_number": "9028187696"
+        }
+
+Response:
+
+        {
+            "status": "success",
+            "message": "Branch Master updated successfully"
+        }
+
+URL:getdemo.in/city-corner/api/delete_branch_master
+Request:
+    {
+    "branch_master_id":2,
+    "mobile_number": "9028187696"
+    }
+Response:
+{
+    "status": "success",
+    "message": "Branch Master deleted successfully"
+}
+
+URL:getdemo.in/city-corner/api/branch_master_list
+Request:
+        {
+            "mobile_number" : "9028187696"
+        }
+Response:
+{
+    "status": "success",
+    "message": "Branch Master List",
+    "Branch Master": [
+        {
+            "branch_master_id": 1,
+            "branch_name": "Maninager",
+            "iStatus": 1,
+            "isDelete": 0,
+            "created_at": "2023-10-23T10:31:37.000000Z",
+            "updated_at": "2023-10-23T10:31:37.000000Z"
+        }
+    ]
+}
+
+
+URL :getdemo.in/city-corner/api/ongoing_order_for_branch_user
+Request:
+{
+"mobile_number" : "8484838373"
+}
+Response:
+{
+    "status": "success",
+    "message": "Ongoing Order",
+    "Ongoing Order": [
+        {
+            "Order No": 2,
+            "Customer Name": "test1",
+            "iGst": "10.00",
+            "cGst": "10.00",
+            "Total Amount": 550,
+            "Products": [
+                {
+                    "Category Name": "Pulao",
+                    "Product Name": "veg pulao",
+                    "Quantity": 4,
+                    "Rate": 150,
+                    "Special Instuction": "medium"
+                },
+                {
+                    "Category Name": "Panner Items",
+                    "Product Name": "paneer masala",
+                    "Quantity": 5,
+                    "Rate": 200,
+                    "Special Instuction": "medium"
+                }
+            ]
+        }
+    ]
+}
+
+URL: getdemo.in/city-corner/api/past_order_for_branch_user
+Request:
+        {
+        "mobile_number" : "8484838373"
+        }
+        
+Response:
+{
+    "status": "success",
+    "message": "Past Order",
+    "Past Order": [
+        {
+            "Order Id": 1,
+            "Customer Name": "test",
+            "Order Status": "delivered",
+            "iGst": "10.00",
+            "cGst": "10.00",
+            "Total Amount": 500,
+            "Products": [
+                {
+                    "Category Name": "Pulao",
+                    "Product Name": "veg pulao",
+                    "Quantity": 2,
+                    "Rate": 150,
+                    "Special Instuction": "medium"
+                },
+                {
+                    "Category Name": "Panner Items",
+                    "Product Name": "paneer masala",
+                    "Quantity": 3,
+                    "Rate": 200,
+                    "Special Instuction": "medium"
+                }
+            ]
+        }
+    ]
+}
+
+URL : getdemo.in/city-corner/api/branch_user_changepassword
+Request
+   {
+    "new_password":"branch",
+    "new_confirm_password":"branch",
+    "mobile_number" : "8484838373"
+}
+Request:
+{
+    "status": "success",
+    "message": "Password Updated Successfully"
+}
+
+
+URL : getdemo.in/city-corner/api/branch_user_customer_changepassword
+Request:
+     {
+        "id":"6",
+        "new_password":"1234",
+        "new_confirm_password":"1234",
+        "mobile_number" : "8484838373"
+    }
+Response:
+{
+    "status": "success",
+    "message": "Password Updated Successfully"
+}
+
+
+URL : getdemo.in/city-corner/api/user_changepassword
+Request:
+     {
+        "new_password":"1234",
+        "new_confirm_password":"1234",
+        "mobile_number" : "9904500630"
+    }
+Response:
+{
+    "status": "success",
+    "message": "Password Updated Successfully"
+}
+

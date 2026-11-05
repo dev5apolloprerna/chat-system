@@ -257,7 +257,7 @@
                             <ul class="list-group list-group-flush chat-list">
                                 <?php $i = 1; ?>
                                 @foreach ($conversations as $c)
-                                    <li class="list-group-item conversation-item text-white" data-id="{{ $c->id }}"
+                                    <li class="list-group-item conversation-item text-white" data-id="{{ $c->id }}" data-conversation-id="{{ $c->conversation_id }}" data-peer="{{ $c->sender_number }}"
                                         data-name="{{ $c->sender_name ? $c->sender_name : $c->sender_number }}">
                                         <a href="javascript:void(0)"
                                             class="d-flex align-items-center justify-content-between text-decoration-none">
@@ -309,287 +309,106 @@
 @endsection
 
 @section('scripts')
-    <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
-
-   <script>
-    const markReadRoute = "{{ route('client.chat.markAsRead', ':id') }}";
-
-    function getTickIcon(status, isSelf = false) {
-        switch (status) {
-            case 0:                                                                                                                                                                                                                                                                                                                                                                                                                                                       
-                return `<i class="bi bi-clock"></i>`;
-            case 1:
-                return `<i class="bi bi-check"></i>`;
-            case 2:
-                return `<i class="bi bi-check-all"></i>`;
-            case 3:
-                return `<i class="bi bi-check-all text-info"></i>`;
-            default:
-                return '';
-        }
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const routes = {
+        list: @json(route('client.chat.index')),
+        messages: @json(route('client.chat.messages', ['conversation' => ':id'])),
+        send: @json(route('client.chat.send', ['conversation' => ':id']))
+    };
+    const list = document.querySelector('.chat-list');
+    const panel = document.getElementById('messages');
+    const input = document.getElementById('message');
+    const button = document.querySelector('#chatForm button');
+    const csrf = document.querySelector('input[name=_token]').value;
+    const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    let selected = null, channel = null, sending = false, loading = false;
+    const key = @json(config('broadcasting.connections.pusher.key'));
+    const pusher = key && window.Pusher ? new Pusher(key, {
+        cluster: @json(config('broadcasting.connections.pusher.options.cluster')), forceTLS: true
+    }) : null;
+    async function request(url, options = {}) {
+        const response = await fetch(url, {...options, headers: {
+            'Accept': 'application/json', 'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrf, ...(options.headers || {})
+        }});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || data.message || 'Request failed');
+        return data;
     }
-
-    document.addEventListener('DOMContentLoaded', function() {
-
-        let currentConversationId = null;
-
-        Pusher.logToConsole = true;
-
-        const pusher = new Pusher("{{ env('PUSHER_APP_KEY') }}", {
-            cluster: "{{ env('PUSHER_APP_CLUSTER') }}",
-            forceTLS: true
-        });
-
-        let pusherChannel = null;
-
-        const fetchMessagesRoute = @json(route('client.chat.messages', ['conversation' => ':id']));
-        const sendMessageRoute = @json(route('client.chat.send', ['conversation' => ':id']));
-
-        let fetchMessagesUrl = "";
-        let sendMessageUrl = "";
-
-        let isAtBottom = true;
-
-        function checkIfAtBottom() {
-            const messagesDiv = document.getElementById('messages');
-            return messagesDiv.scrollHeight - messagesDiv.scrollTop === messagesDiv.clientHeight;
+    async function loadMessages() {
+        if (!selected || loading) return;
+        loading = true;
+        const id = selected.id;
+        try {
+            const messages = await request(routes.messages.replace(':id', id));
+            if (!selected || selected.id !== id) return;
+            const atBottom = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 40;
+            panel.innerHTML = messages.map(m => `<div class="mb-2 ${m.sender_type === 'self' ? 'text-end' : 'text-start'}" id="message-${escape(m.id)}">
+                <div class="message-bubble ${m.sender_type === 'self' ? 'sender' : 'receiver'}">
+                    <div class="message-body">${escape(m.body)}</div>
+                    <div class="message-footer"><span>${escape(m.time)}</span>${m.sender_type === 'self' ?
+                        `<i class="bi ${Number(m.isMessageStatus) >= 2 ? 'bi-check-all' : 'bi-check'} ${Number(m.isMessageStatus) === 3 ? 'text-info' : ''}"></i>` : ''}</div>
+                </div></div>`).join('') || '<p class="text-center text-muted">No messages yet</p>';
+            if (atBottom) panel.scrollTop = panel.scrollHeight;
+        } catch (error) { console.error(error); }
+        finally { loading = false; }
+    }
+    function select(item) {
+        const conversationId = item.dataset.conversationId;
+        if (pusher && channel) pusher.unsubscribe(channel);
+        selected = {id: item.dataset.id, peer: item.dataset.peer};
+        list.querySelectorAll('.conversation-item').forEach(el => el.classList.toggle('active', el === item));
+        document.getElementById('chatTitle').textContent = item.dataset.name;
+        input.disabled = false;
+        button.disabled = sending;
+        if (pusher) {
+            channel = `chat.${conversationId}`;
+            const subscription = pusher.subscribe(channel);
+            subscription.bind('message.sent', loadMessages);
+            subscription.bind('App\\Events\\MessageRead', loadMessages);
         }
-
-        function loadMessages() {
-            const messagesDiv = document.getElementById('messages');
-            const wasAtBottom = checkIfAtBottom();
-
-            if (!currentConversationId) return;
-
-            fetch(fetchMessagesUrl)
-                .then(res => res.json())
-                .then(data => {
-                    let html = '';
-                    if (data.length === 0) {
-                        html = '<p class="text-muted text-center mt-5">No messages yet</p>';
-                    } else {
-                        let lastDateLabel = '';
-
-                        data.forEach(m => {
-                            if (m.date_label !== lastDateLabel) {
-                                html += `
-                                <div class="text-center text-muted small my-3">
-                                    <span class="px-3 py-1 rounded-pill bg-light border">${m.date_label}</span>
-                                </div>`;
-                                lastDateLabel = m.date_label;
-                            }
-
-                            let alignClass = m.sender_type === 'self' ? 'text-end' : 'text-start';
-                            let bubbleClass = m.sender_type === 'self' ? 'sender' : 'receiver';
-
-                            html += `
-                                <div class="mb-2 ${alignClass}" id="message-${m.id}">
-                                    <div class="message-bubble ${bubbleClass}">
-                                        <div class="message-body">${m.body}</div>
-                                        <div class="message-footer">
-                                            <span>${m.time ?? ''}</span>
-                                            ${m.sender_type === 'self' ? getTickIcon(m.isMessageStatus, true) : ''}
-                                        </div>
-                                    </div>
-                                </div>`;
-                        });
-
-                        let activeItem = document.querySelector(
-                            `.conversation-item[data-id="${currentConversationId}"] .last-message-preview`
-                        );
-                        if (activeItem && data.length > 0) {
-                            activeItem.textContent = data[data.length - 1].message;
-                        }
-                    }
-
-                    document.getElementById('messages').innerHTML = html;
-
-                    if (wasAtBottom) {
-                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-                    }
-                })
-                .catch(err => console.error(err));
-        }
-
-        document.getElementById('messages').addEventListener('scroll', function() {
-            isAtBottom = checkIfAtBottom();
-        });
-
-        function selectConversation(item) {
-            document.querySelectorAll('.conversation-item').forEach(i => i.classList.remove('active'));
-            item.classList.add('active');
-
-            currentConversationId = item.getAttribute('data-id');
-
-            if (pusherChannel) {
-                pusherChannel.unbind_all();
-                pusherChannel.unsubscribe();
-            }
-
-            pusherChannel = pusher.subscribe(`chat.${currentConversationId}`);
-
-            pusherChannel.bind('message.sent', function(data) {
-                console.log('📩 New message received:', data);
-                loadMessages();
-            });
-
-            let name = item.getAttribute('data-name');
-
-            document.getElementById('chatTitle').innerText = name;
-
-            document.getElementById('message').disabled = false;
-            document.querySelector('#chatForm button').disabled = false;
-
-            fetchMessagesUrl = fetchMessagesRoute.replace(':id', currentConversationId);
-            sendMessageUrl = sendMessageRoute.replace(':id', currentConversationId);
-
-            loadMessages();
-
-            const markReadUrl = markReadRoute.replace(':id', currentConversationId);
-
-            fetch(markReadUrl, {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRF-TOKEN': document.querySelector('input[name=_token]').value,
-                        'Content-Type': 'application/json'
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    console.log(`Marked ${data.updated} messages as read.`);
-
-                    const activeItem = document.querySelector(
-                        `.conversation-item[data-id="${currentConversationId}"] .badge`);
-                    if (activeItem) {
-                        activeItem.remove();
-                    }
-
-                    loadMessages();
-                })
-                .catch(err => console.error(err));
-        }
-
-        document.querySelector('.chat-list').addEventListener('click', function(e) {
-            let item = e.target.closest('.conversation-item');
-            if (item) selectConversation(item);
-        });
-
-        let firstConversation = document.querySelector('.conversation-item');
-        if (firstConversation) selectConversation(firstConversation);
-
-        setInterval(loadMessages, 3000);
-
-        document.getElementById('chatForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            if (!currentConversationId || !sendMessageUrl) return;
-
-            let messageText = document.getElementById('message').value.trim();
-            if (messageText === '') return;
-
-            fetch(sendMessageUrl, {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRF-TOKEN': document.querySelector('input[name=_token]').value,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        message: messageText
-                    })
-                })
-                .then(res => res.json())
-                .then(data => {
-
-                    const messageInput = document.getElementById('message');
-                    messageInput.value = '';
-                    messageInput.focus();
-
-                    // ✅ 24-Hour format for temporary appended message
-                    const tempTime = new Date().toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: false
-                    });
-
-                    const messagesDiv = document.getElementById('messages');
-                    const tempMessageHtml = `
-                        <div class="mb-2 text-end">
-                            <div class="message-bubble sender">
-                                <div class="message-body">${data.body}</div>
-                                <div class="message-footer">
-                                    <span>${data.time ?? tempTime}</span>
-                                    <i class="bi bi-clock"></i>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    messagesDiv.insertAdjacentHTML('beforeend', tempMessageHtml);
-                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-
-                    setTimeout(loadMessages, 800);
-
-                })
-                .catch(err => console.error(err));
-        });
-
-    });
-
-    const pusher = new Pusher("{{ config('broadcasting.connections.pusher.key') }}", {
-        cluster: "{{ config('broadcasting.connections.pusher.options.cluster') }}",
-        encrypted: true,
-    });
-
-    const userConversationIds = @json($conversations->pluck('id'));
-
-    userConversationIds.forEach((id) => {
-        const channel = pusher.subscribe(`chat.${id}`);
-
-        channel.bind('App\\Events\\MessageSent', function(data) {
-            console.log('📩 New message received:', data);
-
-            if (parseInt(data.conversation_id) === parseInt(currentConversationId)) {
-                loadMessages();
-            } else {
-                const chatItem = document.querySelector(
-                    `.conversation-item[data-id="${data.conversation_id}"]`);
-
-                if (chatItem) {
-                    let badge = chatItem.querySelector('.badge');
-                    if (badge) {
-                        badge.textContent = parseInt(badge.textContent) + 1;
-                    } else {
-                        const span = document.createElement('span');
-                        span.classList.add('badge', 'bg-danger', 'rounded-pill');
-                        span.textContent = '1';
-                        chatItem.querySelector('a').appendChild(span);
-                    }
+        loadMessages();
+    }
+    async function refreshChats() {
+        try {
+            const chats = await request(routes.list);
+            for (const chat of chats) {
+                let item = Array.from(list.children).find(el => el.dataset.peer === chat.sender_number);
+                if (!item) {
+                    item = document.createElement('li');
+                    item.className = 'list-group-item conversation-item';
+                    list.appendChild(item);
                 }
+                Object.assign(item.dataset, {id: String(chat.id), conversationId: String(chat.conversation_id),
+                    peer: chat.sender_number, name: chat.sender_name || chat.sender_number});
+                item.innerHTML = `<a href="#" class="d-flex justify-content-between"><strong>${escape(item.dataset.name)}</strong>
+                    ${chat.unread_count ? `<span class="badge bg-danger rounded-pill">${Number(chat.unread_count)}</span>` : ''}</a>`;
             }
-
-            const chatItem = document.querySelector(
-                `.conversation-item[data-id="${data.conversation_id}"]`);
-            if (chatItem) {
-                let preview = chatItem.querySelector('.last-message-preview');
-                if (!preview) {
-                    preview = document.createElement('div');
-                    preview.classList.add('last-message-preview', 'text-muted', 'small');
-                    chatItem.querySelector('a div').appendChild(preview);
-                }
-                preview.textContent = data.body;
-            }
-        });
-
-        channel.bind('App\\Events\\MessageRead', function(data) {
-            console.log('✅ Messages marked as read:', data);
-            data.message_ids.forEach(id => {
-                const tick = document.querySelector(`#message-${id} .bi`);
-                if (tick) {
-                    tick.classList.remove('bi-check', 'bi-check-all', 'text-info');
-                    tick.classList.add('bi-check-all', 'text-info');
-                }
-            });
-        });
-
+        } catch (error) { console.error(error); }
+    }
+    list.addEventListener('click', e => {
+        const item = e.target.closest('.conversation-item');
+        if (item) { e.preventDefault(); select(item); }
     });
+    const first = list.querySelector('.conversation-item');
+    if (first) select(first);
+    setInterval(() => { loadMessages(); refreshChats(); }, 3000);
+    document.getElementById('chatForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        if (!selected || sending || !input.value.trim()) return;
+        const id = selected.id, text = input.value.trim();
+        sending = true; button.disabled = true;
+        try {
+            await request(routes.send.replace(':id', id), {method: 'POST', body: JSON.stringify({message: text})});
+            if (selected.id === id && input.value.trim() === text) input.value = '';
+            await loadMessages();
+            panel.scrollTop = panel.scrollHeight;
+            await refreshChats();
+        } catch (error) { window.alert(error.message); }
+        finally { sending = false; button.disabled = false; }
+    });
+});
 </script>
-
 @endsection

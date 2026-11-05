@@ -6,7 +6,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\client\ChatController;
 use App\Http\Controllers\client\ClientAuthController;
-use App\Http\Controllers\client\WhatsAppWebhookController;
+use App\Http\Controllers\Api\WhatsAppWebhookController;
 use App\Http\Controllers\ClientController;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
@@ -108,4 +108,4 @@ Route::prefix('client')->name('client.')->group(function () {
 
 // WhatsApp Webhook
 Route::get('/webhook/whatsapp', [WhatsAppWebhookController::class, 'verify']);  // Verification (GET)
-Route::post('/webhook/whatsapp', [WhatsAppWebhookController::class, 'handle']); // Messages (POST)
+Route::post('/webhook/whatsapp', [WhatsAppWebhookController::class, 'receive']); // Messages (POST)

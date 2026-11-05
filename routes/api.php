@@ -40,7 +40,7 @@ Route::post('refresh', [AuthController::class, 'refresh']);
 Route::post('change_password', [AuthController::class, 'change_password']);
 Route::get('me', [AuthController::class, 'me']);
 
-Route::post('/wa/send', [ChatSystemController::class, 'sendAny']); // {to, text}
+Route::post('/wa/send', [ChatSystemController::class, 'sendText']); // {to, text}
 
 
 Route::get('/wa/webhook',  [WhatsAppWebhookController::class, 'verify']);   // Meta verification

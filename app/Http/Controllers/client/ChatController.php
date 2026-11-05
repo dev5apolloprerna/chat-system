@@ -20,19 +20,23 @@ class ChatController extends Controller
     {
         $user = Auth::guard('client')->user();
 
-        $conversations = DB::table('messages')
-            // ->selectRaw('
-            //     MAX(id) as id,
-            //     sender_number,
-            //     sender_name,
-            //     COUNT(CASE WHEN is_read = false THEN 1 END) as unread_count
-            // ')
-            ->selectRaw('MAX(id) as id, sender_number, sender_name, SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) as unread_count')
-            ->where('receiver_number', $user->whatsapp_meta_no)
-            ->groupBy('sender_number', 'sender_name')
-            ->orderByDesc(DB::raw('MAX(id)'))
-            ->get();
-
+        $number = Message::normalizeNumber($user->whatsapp_meta_no);
+        // Keep a stable message anchor per peer, in either direction.
+        $conversations = Message::where(function ($q) use ($number) {
+            $q->whereIn('sender_number', Message::numberVariants($number))->orWhereIn('receiver_number', Message::numberVariants($number));
+        })->orderByDesc('id')->get()->groupBy(function ($message) use ($number) {
+            return $message->sender_number === $number ? $message->receiver_number : $message->sender_number;
+        })->map(function ($messages, $peer) use ($number) {
+            $anchor = $messages->first();
+            return (object) [
+                'id' => $anchor->id,
+                'conversation_id' => $anchor->conversation_id,
+                'sender_number' => $peer,
+                'sender_name' => optional($messages->firstWhere('sender_number', $peer))->sender_name,
+                'unread_count' => $messages->whereIn('receiver_number', Message::numberVariants($number))->where('is_read', false)->count(),
+            ];
+        })->values();
+        if (request()->expectsJson()) return response()->json($conversations);
 
         return view('client.chat.index', compact('conversations'));
     }
@@ -43,40 +47,38 @@ class ChatController extends Controller
         // dd($id);
         $user = Auth::guard('client')->user();
         // dd($user);
-        $message = Message::findOrFail($id);
-        // dd($message);
-
+        $message = $this->ownedMessage($id, $user);
+        $number = Message::normalizeNumber($user->whatsapp_meta_no);
+        $peer = $message->sender_number === $number ? $message->receiver_number : $message->sender_number;
         // ✅ Mark all unread messages from that sender as read
-        Message::where('receiver_number', $user->whatsapp_meta_no)
-            ->where('sender_number', $message->sender_number)
+        Message::whereIn('receiver_number', Message::numberVariants($user->whatsapp_meta_no))
+            ->whereIn('sender_number', Message::numberVariants($peer))
             ->where('is_read', false)
             ->update([
                 'is_read' => true,
                 'isMessageStatus' => 3
             ]);
 
-        $messageIds = Message::where('receiver_number', $user->whatsapp_meta_no)
-            ->where('sender_number', $message->sender_number)
+        $messageIds = Message::whereIn('receiver_number', Message::numberVariants($user->whatsapp_meta_no))
+            ->whereIn('sender_number', Message::numberVariants($peer))
             ->where('is_read', true)
             ->pluck('id');
 
         // 🔥 Broadcast to update blue ticks in sender’s chat
-        if ($messageIds->count() > 0) {
-            broadcast(new \App\Events\MessageRead($message->conversation_id, $messageIds->toArray()))->toOthers();
-        }
+        // Read state is persisted even when the optional broadcaster is unavailable.
 
         $messages = Message::where(function ($q) use ($user) {
-            $q->where('receiver_number', $user->whatsapp_meta_no)
-                ->orWhere('sender_number', $user->whatsapp_meta_no);
+            $q->whereIn('receiver_number', Message::numberVariants($user->whatsapp_meta_no))
+                ->orWhereIn('sender_number', Message::numberVariants($user->whatsapp_meta_no));
         })
-            ->where(function ($q) use ($message) {
-                $q->where('receiver_number', $message->sender_number)
-                    ->orWhere('sender_number', $message->sender_number);
+            ->where(function ($q) use ($peer) {
+                $q->whereIn('receiver_number', Message::numberVariants($peer))
+                    ->orWhereIn('sender_number', Message::numberVariants($peer));
             })
             ->orderBy('created_at', 'asc')
             ->get()
             ->map(function ($msg) use ($user) {
-                $msg->sender_type = $msg->sender_number === $user->whatsapp_meta_no ? 'self' : 'other';
+                $msg->sender_type = $msg->sender_number === Message::normalizeNumber($user->whatsapp_meta_no) ? 'self' : 'other';
                 $msg->time = $msg->created_at ? $msg->created_at->format('h:i A') : null;
 
                 // ✅ Add formatted date for grouping
@@ -91,7 +93,7 @@ class ChatController extends Controller
                 return $msg;
             });
         // ->map(function ($msg) use ($user) {
-        //     $msg->sender_type = $msg->sender_number === $user->whatsapp_meta_no ? 'self' : 'other';
+        //     $msg->sender_type = $msg->sender_number === Message::normalizeNumber($user->whatsapp_meta_no) ? 'self' : 'other';
         //     return $msg;
         // });
         // dd($messages);
@@ -108,16 +110,16 @@ class ChatController extends Controller
 
         $client = auth('client')->user();
 
-        // Ensure conversation belongs to this client
-        $message = Message::where('id', $id)->first();
-
-        // ✅ Use ChatSystemController logic
-        $acc = WhatsAppAccount::where('is_active', true)->latest('id')->first();
-        if (!$acc) {
-            return response()->json(['error' => 'No active WhatsApp account'], 500);
+        $message = $this->ownedMessage($id, $client);
+        $sender = Message::normalizeNumber($client->whatsapp_meta_no);
+        $recipient = $message->sender_number === $sender ? $message->receiver_number : $message->sender_number;
+        $acc = WhatsAppAccount::byPhoneNumberId((string) $client->phone_number_id);
+        if (!$acc || Message::normalizeNumber($acc->display_phone_number) !== $sender) {
+            return response()->json(['error' => 'WhatsApp account does not match this client'], 422);
         }
 
-        $senderBusinessE164 = '+' . ltrim($acc->display_phone_number, '+');
+        $conv = $message->conversation;
+        abort_unless($conv, 422, 'Message conversation is missing');
 
         // Call WhatsApp API directly
         $resp = \Http::withHeaders([
@@ -126,7 +128,7 @@ class ChatController extends Controller
             'Accept'        => 'application/json',
         ])->post("https://graph.facebook.com/{$client->api_version}/{$client->phone_number_id}/messages", [
             'messaging_product' => 'whatsapp',
-            'to'   => $message->sender_number,
+            'to'   => ltrim($recipient, '+'),
             'type' => 'text',
             'text' => ['preview_url' => false, 'body' => $request->message],
         ]);
@@ -138,15 +140,15 @@ class ChatController extends Controller
             $waId = $json['messages'][0]['id'];
 
             // ✅ Always ensure/get conversation
-            $conv = $this->ensureConversationForNumber($client);
+
 
             $newMessage = Message::create([
                 'conversation_id'     => $conv->id,   // ✅ Always use valid conversation id
                 'whatsapp_account_id' => $acc->id,
-                'sender_id'           => $client->id,
+                'sender_id'           => auth('web')->id(),
                 'client_ref'          => $waId,
-                'sender_number'       => $client->whatsapp_meta_no,
-                'receiver_number'     => $message->sender_number,
+                'sender_number'       => $sender,
+                'receiver_number'     => $recipient,
                 'body'                => $request->message,
                 'is_read'             => false,
                 'isMessageStatus'     => 1,
@@ -161,7 +163,12 @@ class ChatController extends Controller
             ]);
 
             // ✅ Fire event for real-time update
-            event(new MessageSent($newMessage));
+            try {
+                event(new MessageSent($newMessage));
+            } catch (\Throwable $e) {
+                Log::warning('Message stored but broadcast failed', ['message_id' => $newMessage->id]);
+            }
+            return response()->json($newMessage, 201);
         } else {
             // dd('else');
             \Log::error('Failed to send WhatsApp message', [
@@ -171,43 +178,24 @@ class ChatController extends Controller
             ]);
         }
 
-        return response()->json($json, $resp->status());
+        return response()->json(['error' => $json['error']['message'] ?? 'WhatsApp did not accept the message'], $resp->successful() ? 502 : $resp->status());
     }
 
-    protected function ensureConversationForNumber($client)
+    protected function ownedMessage($id, $client): Message
     {
-        // dd($client);
-        $conv = Conversation::where('channel', 'whatsapp')
-            ->where('client_id', $client->id)
-            ->first();
-
-        if (!$conv) {
-            // dd('if');
-            $conv = Conversation::create([
-                'title'       => 'WhatsApp: ' . ($client->name ?: substr($client->mobile ?? '', -6)),
-                'channel'     => 'whatsapp',
-                'customer_id' => $client->id,
-                'client_id' => $client->id,
-                'meta'        => ['receiver' => $client->whatsapp_meta_no],
-            ]);
-        } else {
-            // dd('else');
-            $meta = $conv->meta ?? [];
-            if ($conv->whatsapp_meta_no && ($meta['receiver'] ?? null) !== $conv->whatsapp_meta_no) {
-                $meta['receiver'] = $conv->whatsapp_meta_no;
-                $conv->meta = $meta;
-                $conv->save();
-            }
-        }
-        // dd($conv);
-        return $conv;
+        $number = Message::normalizeNumber($client->whatsapp_meta_no);
+        abort_if($number === '', 422, 'Client WhatsApp number is not configured');
+        $message = Message::where('id', $id)->where(function ($q) use ($number) {
+            $q->whereIn('sender_number', Message::numberVariants($number))->orWhereIn('receiver_number', Message::numberVariants($number));
+        })->first();
+        abort_unless($message, 404, 'Message not found');
+        return $message;
     }
-
 
     // ✅ Mark message as delivered (double tick)
     public function markAsDelivered($messageId)
     {
-        $message = Message::find($messageId);
+        $message = $this->ownedMessage($messageId, auth('client')->user());
         if ($message && $message->isMessageStatus < 2) {
             $message->update(['isMessageStatus' => 2]); // delivered
         }
@@ -218,13 +206,13 @@ class ChatController extends Controller
     // ✅ Mark message as read (blue double tick)
     public function markAsReadStatus($messageId)
     {
-        $message = Message::findOrFail($messageId);
+        $message = $this->ownedMessage($messageId, auth('client')->user());
 
-        $message->status = 'read';
+        $message->isMessageStatus = 3;
         $message->is_read = true; // Keep both in sync
         $message->save();
 
-        return response()->json(['status' => 'success', 'message_status' => $message->status]);
+        return response()->json(['status' => 'success', 'message_status' => $message->isMessageStatus]);
     }
 
 
@@ -234,7 +222,7 @@ class ChatController extends Controller
 
         // Fetch all unread messages first
         $messageIds = Message::where('conversation_id', $conversationId)
-            ->where('receiver_number', $user->whatsapp_meta_no)
+            ->whereIn('receiver_number', Message::numberVariants($user->whatsapp_meta_no))
             ->where('is_read', false)
             ->pluck('id');
 
@@ -252,7 +240,7 @@ class ChatController extends Controller
 
         // // Mark all unread messages in the given conversation as read
         // $updated = Message::where('conversation_id', $conversationId)
-        //     ->where('receiver_number', $user->whatsapp_meta_no)
+        //     ->whereIn('receiver_number', Message::numberVariants($user->whatsapp_meta_no))
         //     ->where('is_read', false)
         //     ->update([
         //         'is_read' => true,

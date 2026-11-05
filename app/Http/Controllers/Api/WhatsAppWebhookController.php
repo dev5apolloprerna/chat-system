@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Events\MessageRead;
+use App\Events\MessageSent;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use GuzzleHttp\Client;
@@ -42,9 +43,9 @@ class WhatsAppWebhookController extends Controller
         $tokenOk = WhatsAppAccount::where('verify_token', $verifyToken)
             ->where('is_active', true)
             ->exists();
-        //if ($mode === 'subscribe' && $tokenOk && $challenge !== null) {
-        return response($challenge, 200)->header('Content-Type', 'text/plain');
-        //}
+        if ($mode === 'subscribe' && $verifyToken && $tokenOk && $challenge !== null) {
+            return response($challenge, 200)->header('Content-Type', 'text/plain');
+        }
         return response('Invalid verify token', 403);
     }
 
@@ -52,6 +53,10 @@ class WhatsAppWebhookController extends Controller
     public function receive(Request $r)
     {
         //  dd($r);
+        $secret = config('services.whatsapp.app_secret');
+        if ($secret && !hash_equals('sha256=' . hash_hmac('sha256', $r->getContent(), $secret), (string) $r->header('X-Hub-Signature-256'))) {
+            return response('Invalid webhook signature', 403);
+        }
         $payload = $r->json()->all();
         $body = "";
         try {
@@ -66,127 +71,93 @@ class WhatsAppWebhookController extends Controller
                     // $acc = $phoneNumberId ? WhatsAppAccount::byPhoneNumberId($phoneNumberId) : null;
                     // dd($acc);
 
-                    $phoneNumberId = $value['metadata']['phone_number_id']
-                        ?? WhatsAppAccount::where('is_active', true)->value('phone_number_id');
-                    // dd($phoneNumberId)    ;
-
-                    $acc = $phoneNumberId
-                        ? WhatsAppAccount::byPhoneNumberId($phoneNumberId)
-                        : null;
-                    // dd($acc)    ;
+                    $phoneNumberId = $value['metadata']['phone_number_id'] ?? null;
+                    $acc = $phoneNumberId ? WhatsAppAccount::byPhoneNumberId($phoneNumberId) : null;
+                    if (!$acc) {
+                        Log::warning('WhatsApp webhook account is not configured', ['phone_number_id' => $phoneNumberId]);
+                        return response('WhatsApp account is not configured', 422);
+                    }
 
                     // Receiver (your business number)
                     $bizDisplay = $value['metadata']['display_phone_number'] ?? $acc?->display_phone_number;
-                    $receiver   = $bizDisplay ? ('+' . ltrim($bizDisplay, '+')) : null;
+                    $receiver = Message::normalizeNumber($acc->display_phone_number);
 
                     // Inbound messages (customer replies)
                     foreach (($value['messages'] ?? []) as $m) {
-                        $waMsgId = $m['id'] ?? Str::uuid()->toString();
-                        // Idempotent insert (unique by client_ref + whatsapp_account_id)
-                        $exists = Message::where('client_ref', $waMsgId)
-                            ->when($acc, fn($q) => $q->where('whatsapp_account_id', $acc->id))
-                            ->exists();
-                        // dd($exists);
-                        if ($exists) continue;
-
-                        // Sender (customer)
-                        // dd($exists);
-                        $fromDigits = preg_replace('/\D+/', '', ($m['from'] ?? ''));
-                        if (!$fromDigits) {
-                            Log::warning('WA missing sender', ['m' => $m]);
-                            continue;
+                        $newMessage = $this->storeInbound($acc, $receiver, $m, $value['contacts'] ?? []);
+                        if (!$newMessage) continue; // webhook retry already persisted
+                        $conv = $newMessage->conversation;
+                        $sender = $newMessage->sender_number;
+                        $body = $newMessage->body;
+                        try {
+                            event(new MessageSent($newMessage));
+                        } catch (\Throwable $e) {
+                            Log::warning('Inbound message stored but broadcast failed', ['message_id' => $newMessage->id]);
                         }
-                        $sender = '+' . $fromDigits;
-
-                        // Extract a readable body and type
-                        [$type, $body] = $this->extractBody($m);
-
-                        // Ensure a "customer" user for this WA number (or use your own mapper)
-                        $profileName = $value['contacts'][0]['profile']['name'] ?? null;
-                        // dd($profileName);
-                        $customer = method_exists(User::class, 'ensureForWhatsApp')
-                            ? User::ensureForWhatsApp($sender, $profileName)
-                            : $this->fallbackEnsureForWhatsApp($sender, $profileName);
-                        // dd($customer)    ;
-
-                        // Pick an agent if you route (optional)
-                        $agent = User::find(1); // adjust to your rules; can be null
-
-                        // Ensure/load conversation for this customer
-                        $conv = $this->ensureConversationForNumber($customer, $receiver);
-
-                        DB::transaction(function () use ($conv, $acc, $waMsgId, $body, $profileName, $customer, $agent, $m, $sender, $receiver, $type) {
-
-                            // Participants (no duplicates)
-                            ConversationParticipant::firstOrCreate([
-                                'conversation_id' => $conv->id,
-                                'user_id'         => $customer->id,
-                            ], ['role' => 'member']);
-
-                            if ($agent) {
-                                ConversationParticipant::firstOrCreate([
-                                    'conversation_id' => $conv->id,
-                                    'user_id'         => $agent->id,
-                                ], ['role' => 'admin']);
-                            }
-
-                            // Save message row
-                            Message::create([
-                                'conversation_id'     => $conv->id,
-                                'whatsapp_account_id' => $acc?->id,
-                                'sender_id'           => $customer->id,
-                                'client_ref'          => $waMsgId,     // wamid…
-                                'sender_number'       => $sender,      // +919…
-                                'sender_name'         => $profileName,
-                                'receiver_number'     => $receiver,    // +9163567…
-                                'body'                => $body,
-                                'is_read'             => false,
-                                'isMessageStatus'     => 1,
-                                'meta'                => [
-                                    'source'            => 'whatsapp',
-                                    'type'              => $type,
-                                    'sender'            => $sender,
-                                    'receiver'          => $receiver,
-                                    'phone_number_id'   => $acc?->phone_number_id,
-                                    'business_account'  => $acc?->business_account_id,
-                                    'raw'               => $m,
-                                ],
-                            ]);
-
-                            $conv->touch();
-                        });
-                    }
-                    # This Code for Auto Ai chatbot Based Replay Start
-                        $client = DB::table('clients')->where('whatsapp_meta_no', $receiver)->first();
-                        if ($client && $client->Assistan_flag == 1) {
-                            $assistancId = $client->AssistantId ?? null;
-                            if (!empty($assistancId)) {
-                                $airesponse = $this->ExecuteAIChatAPI($body, $assistancId);
-                                $send_res = $this->send($airesponse, $receiver, $sender, $client);
+                        // Auto-reply only for a newly stored inbound message, never a status event or retry.
+                        $client = DB::table('clients')->where('phone_number_id', $acc->phone_number_id)->first();
+                        if ($client && ($client->Assistan_flag ?? 0) == 1 && !empty($client->AssistantId)) {
+                            try {
+                                $reply = $this->ExecuteAIChatAPI($body, $client->AssistantId);
+                                $this->send($reply, $receiver, $sender, $client, $conv);
+                            } catch (\Throwable $e) {
+                                Log::error('WhatsApp auto-reply failed', ['message_id' => $newMessage->id]);
                             }
                         }
-                    # This Code for Auto Ai chatbot Based Replay End
-
-                    // Optional: delivery/read statuses for your outbound messages
-                    foreach (($value['statuses'] ?? []) as $st) {
-                        // If you store outbound messages with client_ref = wa_message_id
-                        // you can update status in meta here.
-                        // Example:
-                        // Message::where('client_ref', $st['id'] ?? '')
-                        //     ->when($acc, fn($q) => $q->where('whatsapp_account_id', $acc->id))
-                        //     ->update(['meta->last_status' => $st['status'] ?? 'unknown']);
                     }
+                    $this->updateStatuses($value, $acc);
+
                 }
             }
 
             return response('EVENT_RECEIVED', 200);
         } catch (\Throwable $e) {
             Log::error('WA receive failed', ['e' => $e->getMessage()]);
-            // Still 200 to avoid retry storm
-            return response('EVENT_RECEIVED', 200);
+            // Let Meta retry transient storage failures instead of losing the reply.
+            return response('Webhook processing failed', 500);
         }
     }
-    private function send($Message,$Sender,$Receiver,$client)
+    protected function storeInbound(WhatsAppAccount $account, string $receiver, array $data, array $contacts): ?Message
+    {
+        if (empty($data['id']) || !Message::normalizeNumber($data['from'] ?? null)) {
+            throw new \InvalidArgumentException('Inbound message requires an ID and sender');
+        }
+        return DB::transaction(function () use ($account, $receiver, $data, $contacts) {
+            // Serialize writes per business account so concurrent retries cannot
+            // create duplicate messages or split the same pair into two threads.
+            WhatsAppAccount::whereKey($account->id)->lockForUpdate()->firstOrFail();
+            if (Message::where('whatsapp_account_id', $account->id)->where('client_ref', $data['id'])->exists()) return null;
+            $sender = Message::normalizeNumber($data['from']);
+            $profile = collect($contacts)->first(function ($contact) use ($sender) {
+                return Message::normalizeNumber($contact['wa_id'] ?? null) === $sender;
+            }) ?? ($contacts[0] ?? []);
+            $name = $profile['profile']['name'] ?? null;
+            $customer = User::ensureForWhatsApp($sender);
+            $conversation = $this->ensureConversationForNumber($customer, $receiver);
+            ConversationParticipant::firstOrCreate([
+                'conversation_id' => $conversation->id, 'user_id' => $customer->id,
+            ], ['role' => 'member']);
+            [$type, $body] = $this->extractBody($data);
+            $message = Message::create([
+                'conversation_id' => $conversation->id,
+                'whatsapp_account_id' => $account->id,
+                'sender_id' => $customer->id,
+                'client_ref' => $data['id'],
+                'sender_number' => $sender,
+                'sender_name' => $name,
+                'receiver_number' => $receiver,
+                'body' => $body,
+                'is_read' => false,
+                'isMessageStatus' => 1,
+                'meta' => ['source' => 'whatsapp', 'direction' => 'in', 'type' => $type,
+                    'phone_number_id' => $account->phone_number_id, 'raw' => $data],
+            ]);
+            $conversation->touch();
+            return $message;
+        });
+    }
+
+    private function send($Message,$Sender,$Receiver,$client, Conversation $conv)
     {
         //dd($Receiver,"call");   
       // $Sender  company whatsapp number
@@ -197,7 +168,7 @@ class WhatsAppWebhookController extends Controller
         //$message = Message::where('id', $id)->first();
 
         // âœ… Use ChatSystemController logic
-        $acc = WhatsAppAccount::where('is_active', true)->latest('id')->first();
+        $acc = WhatsAppAccount::byPhoneNumberId((string) $client->phone_number_id);
         if (!$acc) {
             return response()->json(['error' => 'No active WhatsApp account'], 500);
         }
@@ -223,12 +194,12 @@ class WhatsAppWebhookController extends Controller
             $waId = $json['messages'][0]['id'];
 
             // âœ… Always ensure/get conversation
-            $conv = $this->ensureConversationForNumber_ResponceChatBoat($client);
+            // Reuse the inbound conversation for the reply.
             
             $newMessage = Message::create([
                 'conversation_id'     => $conv->id,   // âœ… Always use valid conversation id
                 'whatsapp_account_id' => $acc->id,
-                'sender_id'           => $client->id,
+                'sender_id'           => null,
                 'client_ref'          => $waId,
                 'sender_number'       => $Sender,
                 'receiver_number'     => $Receiver,
@@ -337,28 +308,7 @@ class WhatsAppWebhookController extends Controller
     /** Create/find a conversation per WA customer */
     protected function ensureConversationForNumber(User $customer, ?string $receiver): Conversation
     {
-        // One open thread per WA customer (adapt if you have a different rule)
-        $conv = Conversation::where('channel', 'whatsapp')
-            ->where('customer_id', $customer->id)
-            ->first();
-
-        if (!$conv) {
-            $conv = Conversation::create([
-                'title'       => 'WhatsApp: ' . ($customer->name ?: substr($customer->phone ?? '', -6)),
-                'channel'     => 'whatsapp',
-                'customer_id' => $customer->id,
-                'meta'        => ['receiver' => $receiver],
-            ]);
-        } else {
-            $meta = $conv->meta ?? [];
-            if ($receiver && ($meta['receiver'] ?? null) !== $receiver) {
-                $meta['receiver'] = $receiver;
-                $conv->meta = $meta;
-                $conv->save();
-            }
-        }
-
-        return $conv;
+        return Conversation::forWhatsAppPair($customer, $receiver ?? '');
     }
 
     /** Fallback if you don’t have User::ensureForWhatsApp() */
@@ -377,75 +327,30 @@ class WhatsAppWebhookController extends Controller
         return $user;
     }
 
-    // whatsapp status webhook
+    // Meta sends delivery/read updates to the same callback as inbound messages.
     public function handleStatus(Request $request)
     {
-        Log::info('Webhook received whatsapp status', $request->all());
+        return $this->receive($request);
+    }
 
-        $data = $request->all();
-
-        // ✅ Check nested structure
-        if (
-            empty($data['entry'][0]['changes'][0]['value']['statuses']) ||
-            !is_array($data['entry'][0]['changes'][0]['value']['statuses'])
-        ) {
-            return response()->json(['status' => 'ignored']);
-        }
-
-        $statuses = $data['entry'][0]['changes'][0]['value']['statuses'];
-
-        foreach ($statuses as $status) {
-            $waMessageId = $status['id'] ?? null;
-            $messageStatus = $status['status'] ?? null;
-
-            // ✅ Only act when message is read
-            if ($messageStatus === 'read' && $waMessageId) {
-                $message = Message::where('client_ref', $waMessageId)->first();
-
-                if ($message) {
-                    $message->update([
-                        'is_read' => true,
-                        'isMessageStatus' => 3, // mark as read (blue tick)
-                    ]);
-
-                    // ✅ Optional: broadcast real-time update to frontend
+    protected function updateStatuses(array $value, WhatsAppAccount $account): void
+    {
+        foreach ($value['statuses'] ?? [] as $status) {
+            $rank = ['sent' => 1, 'delivered' => 2, 'read' => 3][$status['status'] ?? ''] ?? null;
+            if (!$rank || empty($status['id'])) continue;
+            $message = Message::where('whatsapp_account_id', $account->id)
+                ->where('client_ref', $status['id'])->first();
+            if (!$message || $message->isMessageStatus >= $rank) continue;
+            $message->isMessageStatus = $rank;
+            if ($rank === 3) $message->is_read = true;
+            $message->save();
+            if ($rank === 3) {
+                try {
                     event(new MessageRead($message->conversation_id, [$message->id]));
-                } else {
-                    Log::warning("No message found for WhatsApp ID: {$waMessageId}");
+                } catch (\Throwable $e) {
+                    Log::warning('Read status stored but broadcast failed', ['message_id' => $message->id]);
                 }
             }
         }
-
-        return response()->json(['success' => true]);
-    }
-    
-    
-    protected function ensureConversationForNumber_ResponceChatBoat($client)
-    {
-        // dd($client);
-        $conv = Conversation::where('channel', 'whatsapp')
-            ->where('client_id', $client->id)
-            ->first();
-
-        if (!$conv) {
-            // dd('if');
-            $conv = Conversation::create([
-                'title'       => 'WhatsApp: ' . ($client->name ?: substr($client->mobile ?? '', -6)),
-                'channel'     => 'whatsapp',
-                'customer_id' => $client->id,
-                'client_id' => $client->id,
-                'meta'        => ['receiver' => $client->whatsapp_meta_no],
-            ]);
-        } else {
-            // dd('else');
-            $meta = $conv->meta ?? [];
-            if ($conv->whatsapp_meta_no && ($meta['receiver'] ?? null) !== $conv->whatsapp_meta_no) {
-                $meta['receiver'] = $conv->whatsapp_meta_no;
-                $conv->meta = $meta;
-                $conv->save();
-            }
-        }
-        // dd($conv);
-        return $conv;
     }
 }
